@@ -1,3 +1,4 @@
+import { bindVideoLookup } from "./youtube.js";
 import { renderCalendar } from "./calendar.js";
 const $ = s => document.querySelector(s);
 const main = $("#main"), dialog = $("#dialog"), selector = $("#languages");
@@ -120,9 +121,12 @@ function activityForm(a={}){
   const path="/"+lang+"/activities"+(a.id?"/"+a.id:"");
   form(a.id?"Edit activity":"Log activity",
     '<label>Activity type<select name="kind"><option value="video">YouTube video</option><option value="article" '+(a.kind==="article"?"selected":"")+'>Article</option></select></label>'+
+    field("Source URL (optional)","url",a.url,"url",'placeholder="https://"')+
+    '<small data-video-status role="status"></small>'+
     field("Title","title",a.title)+field("Session date","day",a.day??iso(new Date()),"date","required")+
-    field("Time spent (minutes)","minutes",a.minutes,"number","required min=1 max=1440 step=1")+
-    field("Source URL (optional)","url",a.url,"url",'placeholder="https://"'),"Save activity",data=>api(path,a.id?"PUT":"POST",{...data,url:data.url||null,minutes:Number(data.minutes)}));
+    field("Time spent (minutes)","minutes",a.minutes,"number","required min=1 max=1440 step=1"),
+    "Save activity",data=>api(path,a.id?"PUT":"POST",{...data,url:data.url||null,minutes:Number(data.minutes)}));
+  bindVideoLookup(dialog.querySelector("form"));
 }
 function cardForm(c={}){
   const path="/"+lang+"/cards"+(c.id?"/"+c.id:"");

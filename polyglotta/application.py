@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import database
-from .routes import activities, cards, languages, statistics
+from .routes import activities, cards, languages, statistics, youtube
 
 
 def create_app(database_path: Path | None = None) -> FastAPI:
@@ -26,6 +26,8 @@ def create_app(database_path: Path | None = None) -> FastAPI:
     app = FastAPI(title="Polyglotta", lifespan=lifespan)
     for router in (languages.router, activities.router, cards.router, statistics.router):
         app.include_router(router, prefix="/api/languages")
+
+    app.include_router(youtube.router)
 
     static = database.ROOT / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")

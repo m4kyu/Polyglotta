@@ -12,7 +12,7 @@ python3 -m venv .venv
 .venv/bin/python -m uvicorn main:app
 ```
 
-Open http://127.0.0.1:8000 and select **Add language**. Log the minutes you actually spent on an article or video. Use **Activity history** to edit a session or create a flashcard from its source.
+Open http://127.0.0.1:8000 and select **Add language**. For a YouTube video, paste its link in **Source URL** to fill the title and viewing time automatically. Adjust the minutes for a partial session. If the video details are unavailable, you can enter them manually. Use **Activity history** to edit a session or create a flashcard from its source.
 
 SQLite stores your records in `data/polyglotta.sqlite3`. Set `POLYGLOTTA_DB` to use another database path. The active language is remembered in the current browser. This single-profile application is intended for loopback use.
 
