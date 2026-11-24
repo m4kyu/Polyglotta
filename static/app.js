@@ -1,4 +1,4 @@
-import { bindVideoLookup } from "./youtube.js";
+import { bindVideoLookup, youtubeVideoId } from "./youtube.js";
 import { renderCalendar } from "./calendar.js";
 const $ = s => document.querySelector(s);
 const main = $("#main"), dialog = $("#dialog"), selector = $("#languages");
@@ -63,10 +63,36 @@ function mix(){
   return '<section class="panel"><h2>Activity mix</h2><div class="sub">Lifetime immersion by type</div><div class="mix"><div class="ring" style="background:'+bg+'"><div><strong>'+activities.length+'</strong><small>sessions</small></div></div><div class="mixlist">'+["video","article"].map(k=>'<div>'+dot(k)+(k==="video"?"Watching":"Reading")+'<b>'+duration(stats.by_type[k])+'</b></div>').join("")+'</div></div></section>';
 }
 function link(url,label){return url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+label+'</a>':label}
+function activityThumbnail(activity){
+  const videoId = activity.kind === "video" && youtubeVideoId(activity.url);
+  if (!videoId) {
+    const style = activity.kind === "article" ? "badge read" : "badge";
+    return '<span class="'+style+'">'+icon(activity.kind)+'</span>';
+  }
+  return `<button class="video-thumb" type="button" data-action="preview" data-id="${activity.id}"
+            aria-label="Preview video: ${esc(activity.title)}">
+            <img src="https://i.ytimg.com/vi/${videoId}/mqdefault.jpg" loading="lazy" alt="">
+            <span aria-hidden="true">▶</span>
+          </button>`;
+}
+
+function previewVideo(activity){
+  const videoId = activity && youtubeVideoId(activity.url);
+  if (!videoId) return;
+  openDialog(esc(activity.title), `
+    <iframe class="video-player" title="${esc(activity.title)}"
+            src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1"
+            allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    <div class="foot">${link(activity.url, "Watch on YouTube ↗")}<button data-close autofocus>Close</button></div>`);
+  // Removing the iframe also stops playback when the dialog closes via Escape.
+  const player = dialog.querySelector(".video-player");
+  dialog.addEventListener("close", () => player.remove(), {once:true});
+}
 function rows(items,full){
   if(!activities.length)return empty("activities");
   if(!items.length)return '<p class="empty">No sessions match this filter.</p>';
-  return '<div>'+items.map(a=>'<div class="entry"><span class="badge '+(a.kind==="article"?"read":"")+'">'+icon(a.kind)+'</span><div class="entry-text"><b>'+link(a.url,esc(a.title))+'</b><div class="sub">'+(a.kind==="article"?"Article":"YouTube video")+' · '+esc(local(a.day).toLocaleDateString())+'</div></div><b>'+duration(a.minutes)+'</b>'+(full?'<div class="row-actions">'+action("from","Create card",a.id)+action("activity","Edit",a.id)+action("del-activities","Delete",a.id)+'</div>':'')+'</div>').join("")+'</div>';
+  return '<div>'+items.map(a=>'<div class="entry">'+activityThumbnail(a)+'<div class="entry-text"><b>'+link(a.url,esc(a.title))+'</b><div class="sub">'+(a.kind==="article"?"Article":"YouTube video")+' · '+esc(local(a.day).toLocaleDateString())+'</div></div><b>'+duration(a.minutes)+'</b>'+(full?'<div class="row-actions">'+action("from","Create card",a.id)+action("activity","Edit",a.id)+action("del-activities","Delete",a.id)+'</div>':'')+'</div>').join("")+'</div>';
 }
 function render(){
   const p=page();$("#crumb").textContent=titles[p];document.title=titles[p]+" · Polyglotta";
@@ -149,6 +175,7 @@ function handle(actionName,id){
   if(actionName==="range"){days=id;return refresh()}
   if(!lang)return languageForm(()=>handle(actionName,id));
   const a=activities.find(v=>v.id===id),c=cards.find(v=>v.id===id);
+  if(actionName==="preview")return previewVideo(a);
   if(actionName==="activity")return activityForm(a);
   if(actionName==="card")return cardForm(c);
   if(actionName==="from")return cardForm({url:a.url});
