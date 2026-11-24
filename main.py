@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, HttpUrl, StringConstraints
 
+from demo import populate
+
 ROOT = Path(__file__).resolve().parent
 DATABASE = Path(os.environ.get("POLYGLOTTA_DB", ROOT / "data" / "polyglotta.sqlite3"))
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
@@ -53,6 +55,8 @@ async def lifespan(app):
         db.executescript("""
             CREATE TABLE IF NOT EXISTS languages (
                 id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE);
+            CREATE TABLE IF NOT EXISTS demo_journals (
+                language_id INTEGER PRIMARY KEY REFERENCES languages(id));
             CREATE TABLE IF NOT EXISTS activities (
                 id INTEGER PRIMARY KEY, language_id INTEGER NOT NULL REFERENCES languages(id),
                 kind TEXT NOT NULL, title TEXT NOT NULL, day TEXT NOT NULL,
@@ -90,6 +94,12 @@ def add_language(item: Language):
             return {"id": key, "name": item.name}
     except sqlite3.IntegrityError:
         raise HTTPException(409, "You already track that language.")
+
+
+@app.post(base + "/demo")
+def load_demo(today: Annotated[date, Query(ge=date(2, 1, 1))]):
+    with connection() as db:
+        return {"language_id": populate(db, today)}
 
 
 def language_db(language_id: int):

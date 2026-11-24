@@ -17,3 +17,7 @@ Open http://127.0.0.1:8000 and select **Add language**. Log the minutes you actu
 SQLite stores your records in `data/polyglotta.sqlite3`. Set `POLYGLOTTA_DB` to use another database path. The active language is remembered in the current browser. This single-profile application is intended for loopback use.
 
 Interactive API documentation is available at http://127.0.0.1:8000/docs.
+
+## Explore the demo
+
+Select **Explore demo** on the empty dashboard or in the language menu. Switch between **Spanish (demo)** and **Japanese (demo)** to compare their immersion calendars, browse sample reading and watching sessions, and practice four phrase cards in each language. Session dates are relative to the first time you open the demo. Reopening it keeps your edits and practice material.

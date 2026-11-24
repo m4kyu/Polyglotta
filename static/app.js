@@ -28,8 +28,9 @@ function notify(message){const n=$("#notice");n.textContent=message;n.hidden=fal
 function choose(id){lang=id;localStorage.setItem("polyglotta.language",id);filter="all";return refresh()}
 async function refresh(){
   const v=++version,now=new Date();
-  selector.innerHTML=languages.map(l=>'<option value="'+l.id+'">'+esc(l.name)+'</option>').join("")+'<option value="add">＋ Add language</option>';
-  selector.value=lang??"add";
+  selector.innerHTML=languages.map(l=>'<option value="'+l.id+'">'+esc(l.name)+'</option>').join("")+'<option value="add">＋ Add language</option><option value="demo">Explore demo</option>';
+  if (!lang) selector.insertAdjacentHTML("afterbegin", '<option disabled value="">Choose a language</option>');
+  selector.value=lang??"";
   if(lang){
     const result=await Promise.all(["/activities","/cards","/statistics?days="+days+"&today="+iso(now)].map(p=>api("/"+lang+p)));
     if(v!==version)return;
@@ -72,7 +73,8 @@ function render(){
   const today=new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
   const h='<div class="heading"><h1>'+(p==="dashboard"?"Immersion overview":titles[p])+'</h1>';
   if(p==="dashboard"){
-    main.innerHTML=h+'<span class="date">'+today+'</span></div><section class="hero"><canvas aria-hidden="true"></canvas><div class="eyebrow">TOTAL IMMERSION TIME</div><div class="number">'+Math.floor(stats.total/60)+'<em>h</em>'+stats.total%60+'<em>m</em></div><div class="week">'+icon("trend")+'<b>'+duration(stats.weekly)+'</b> in the last 7 days</div></section><div class="panels">'+chart()+mix()+'</div><section class="panel calendar-panel"></section><section class="panel"><div class="panelhead"><h2>Recent activity</h2><a href="#history" class="textbtn">View history →</a></div>'+rows(activities.slice(0,4),false)+'</section>';
+    const headingAction = lang ? '<span class="date">'+today+'</span>' : action("demo","Explore demo");
+    main.innerHTML=h+headingAction+'</div><section class="hero"><canvas aria-hidden="true"></canvas><div class="eyebrow">TOTAL IMMERSION TIME</div><div class="number">'+Math.floor(stats.total/60)+'<em>h</em>'+stats.total%60+'<em>m</em></div><div class="week">'+icon("trend")+'<b>'+duration(stats.weekly)+'</b> in the last 7 days</div></section><div class="panels">'+chart()+mix()+'</div><section class="panel calendar-panel"></section><section class="panel"><div class="panelhead"><h2>Recent activity</h2><a href="#history" class="textbtn">View history →</a></div>'+rows(activities.slice(0,4),false)+'</section>';
     renderCalendar($(".calendar-panel"), activities, iso(new Date()));
     import("/static/globe.js").then(({drawGlobe})=>{const c=$("canvas");if(c){drawGlobe(c);globeObserver.disconnect();globeObserver.observe(c)}});
   }else if(p==="history"){
@@ -109,7 +111,7 @@ function field(label,name,value="",type="text",attrs="required maxlength=300"){
   return '<label>'+label+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+attrs+'></label>';
 }
 function languageForm(after){
-  selector.value=lang??"add";
+  selector.value=lang??"";
   form("Add a language",field("Language name","name","","text",'required maxlength="80" placeholder="e.g. Japanese"'),"Add language",async data=>{
     const l=await api("","POST",data);languages.push(l);lang=l.id;localStorage.setItem("polyglotta.language",lang);filter="all";return after;
   });
@@ -132,7 +134,13 @@ function practice(deck,index=0,revealed=false){
   $("#advance").focus();
   $("#advance").onclick=()=>{if(!revealed)practice(deck,index,true);else if(index+1<deck.length)practice(deck,index+1);else{dialog.close();notify("Practice complete.")}};
 }
+async function loadDemo(){
+  const demo = await api("/demo?today="+iso(new Date()), "POST");
+  languages = await api("");
+  await choose(demo.language_id);
+}
 function handle(actionName,id){
+  if(actionName==="demo")return loadDemo();
   if(actionName==="language")return languageForm();
   if(actionName==="range"){days=id;return refresh()}
   if(!lang)return languageForm(()=>handle(actionName,id));
@@ -150,10 +158,14 @@ function handle(actionName,id){
 main.onclick=e=>{const b=e.target.closest("[data-action]");if(b)Promise.resolve(handle(b.dataset.action,Number(b.dataset.id))).catch(err=>notify(err.message))};
 main.onchange=e=>{if(e.target.id==="filter"){filter=e.target.value;render()}};
 dialog.onclick=e=>{if(e.target.closest("[data-close]"))dialog.close()};
-selector.onchange=()=>{if(selector.value==="add")languageForm();else choose(Number(selector.value)).catch(err=>notify(err.message))};
-// With no languages yet, the select contains only its add action.
-selector.onpointerdown=e=>{if(!languages.length){e.preventDefault();languageForm()}};
-selector.onkeydown=e=>{if(!languages.length&&["Enter"," "].includes(e.key)){e.preventDefault();languageForm()}};
+selector.onchange=()=>{
+  if(selector.value==="add")return languageForm();
+  if(selector.value==="demo"){
+    selector.value=lang??"";
+    return loadDemo().catch(err=>notify(err.message));
+  }
+  choose(Number(selector.value)).catch(err=>notify(err.message));
+};
 $("#log").onclick=()=>handle("activity");
 window.addEventListener("hashchange",()=>{if(stats)render()});
 async function init(){
