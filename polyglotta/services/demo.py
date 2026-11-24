@@ -1,7 +1,13 @@
 """Sample immersion journals for the in-app demo."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from urllib.parse import quote
+
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models import Activity, Card, DemoJournal, Language
 
 
 JOURNALS = (
@@ -34,27 +40,28 @@ JOURNALS = (
 )
 
 
-def populate(db, today):
+def populate(db: Session, today: date):
     """Create both journals atomically and return the first demo language ID."""
-    db.execute("BEGIN IMMEDIATE")
-    existing = db.execute("SELECT language_id FROM demo_journals ORDER BY language_id").fetchone()
-    if existing:
-        return existing[0]
+    existing = db.scalar(select(DemoJournal.language_id).order_by(DemoJournal.language_id).limit(1))
+    if existing is not None:
+        return existing
 
     first_id = None
     for journal in JOURNALS:
         name = base_name = journal["language"] + " (demo)"
         suffix = 2
-        while db.execute("SELECT 1 FROM languages WHERE name=?", (name,)).fetchone():
+        while db.scalar(select(Language.id).where(Language.name == name)) is not None:
             name = f"{base_name} {suffix}"
             suffix += 1
-        language_id = db.execute("INSERT INTO languages(name) VALUES (?)", (name,)).lastrowid
-        db.execute("INSERT INTO demo_journals(language_id) VALUES (?)", (language_id,))
+        language = Language(name=name)
+        db.add(language)
+        db.flush()
+        language_id = language.id
+        db.add(DemoJournal(language_id=language_id))
         if first_id is None:
             first_id = language_id
 
         wiki = f"https://{journal['wiki']}.wikipedia.org/wiki/"
-        activities = []
         video_count = 0
         for index, offset in enumerate(reversed(journal["days_ago"])):
             day = (today - timedelta(days=offset)).isoformat()
@@ -62,14 +69,14 @@ def populate(db, today):
                 series = journal["videos"][video_count % len(journal["videos"])]
                 title = f"{series} · {video_count // len(journal['videos']) + 1}"
                 video_count += 1
-                activities.append((language_id, "video", title, day, 12 + index * 7 % 45, None))
+                db.add(Activity(language_id=language_id, kind="video", title=title,
+                                day=day, minutes=12 + index * 7 % 45))
             if index % 3 != 0:
                 topic = journal["articles"][index % len(journal["articles"])]
                 url = wiki + quote(topic.replace(" ", "_"))
-                activities.append((language_id, "article", topic, day, 6 + index * 5 % 22, url))
-        db.executemany("""INSERT INTO activities(language_id, kind, title, day, minutes, url)
-                          VALUES (?, ?, ?, ?, ?, ?)""", activities)
-        db.executemany("INSERT INTO cards(language_id, front, back, url) VALUES (?, ?, ?, ?)",
-                       [(language_id, front, back, wiki + quote(topic.replace(" ", "_")))
-                        for front, back, topic in journal["cards"]])
+                db.add(Activity(language_id=language_id, kind="article", title=topic,
+                                day=day, minutes=6 + index * 5 % 22, url=url))
+        for front, back, topic in journal["cards"]:
+            db.add(Card(language_id=language_id, front=front, back=back,
+                        url=wiki + quote(topic.replace(" ", "_"))))
     return first_id
