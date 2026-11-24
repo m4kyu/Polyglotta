@@ -78,3 +78,8 @@ dialog:has(.video-player) { width: min(760px, 94vw); }
   background: #14251e;
 }
 dialog:has(.video-player) .foot { align-items: center; }
+
+.signed-out > aside, .signed-out > .workspace, body:not(.signed-out) > #auth { display: none; }
+#auth { width: min(420px, 90vw); margin: 10vh auto; padding: 2rem; background: white; border-radius: 12px; }
+#auth h1 { color: var(--green); }
+#auth label, #auth input { display: block; width: 100%; margin-bottom: .8rem; }

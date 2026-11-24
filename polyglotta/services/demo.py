@@ -40,9 +40,9 @@ JOURNALS = (
 )
 
 
-def populate(db: Session, today: date):
+def populate(db: Session, today: date, account_id: int):
     """Create both journals atomically and return the first demo language ID."""
-    existing = db.scalar(select(DemoJournal.language_id).order_by(DemoJournal.language_id).limit(1))
+    existing = db.scalar(select(DemoJournal.language_id).join(Language).where(Language.account_id == account_id).order_by(DemoJournal.language_id).limit(1))
     if existing is not None:
         return existing
 
@@ -50,10 +50,10 @@ def populate(db: Session, today: date):
     for journal in JOURNALS:
         name = base_name = journal["language"] + " (demo)"
         suffix = 2
-        while db.scalar(select(Language.id).where(Language.name == name)) is not None:
+        while db.scalar(select(Language.id).where(Language.account_id == account_id, Language.name == name)) is not None:
             name = f"{base_name} {suffix}"
             suffix += 1
-        language = Language(name=name)
+        language = Language(name=name, account_id=account_id)
         db.add(language)
         db.flush()
         language_id = language.id

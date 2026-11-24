@@ -14,7 +14,7 @@ def database_path():
 
 def make_engine(path):
     engine = create_engine(URL.create("sqlite", database=str(path)),
-                           connect_args={"check_same_thread": False})
+                           hide_parameters=True, connect_args={"check_same_thread": False})
 
     @event.listens_for(engine, "connect")
     def configure(connection, _):

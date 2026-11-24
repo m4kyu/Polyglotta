@@ -4,7 +4,8 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
-from sqlalchemy import inspect
+from polyglotta.claim_journal import claim
+from polyglotta.security import Credentials
 
 from polyglotta.database import make_engine, migrate
 
@@ -46,13 +47,27 @@ class MigrationTests(unittest.TestCase):
 
     def verify_adoption(self, script):
         self.setup_legacy(script)
-        before = self.snapshot()
-        migrate(self.engine)
+        queries = ["SELECT id, name FROM languages",
+                   "SELECT id, language_id, kind, title, day, minutes, url FROM activities",
+                   "SELECT id, language_id, front, back, url FROM cards"]
+        if "demo_journals" in script:
+            queries.append("SELECT language_id FROM demo_journals")
+        with closing(sqlite3.connect(self.path)) as db:
+            before = [db.execute(query).fetchall() for query in queries]
+            migrate(self.engine)
+            self.assertEqual(before, [db.execute(query).fetchall() for query in queries])
+            self.assertEqual(db.execute("SELECT username, password_hash FROM accounts").fetchall(),
+                             [(None, None)])
         after = self.snapshot()
-        self.assertTrue(set(before).issubset(after))
-        self.assertIn("demo_journals", inspect(self.engine).get_table_names())
         migrate(self.engine)
         self.assertEqual(self.snapshot(), after)
+        credentials = Credentials(username="owner", password="owner passphrase sample")
+        claim(self.engine, credentials)
+        with self.assertRaisesRegex(ValueError, "no unclaimed"):
+            claim(self.engine, credentials)
+        with closing(sqlite3.connect(self.path)) as db:
+            self.assertEqual(db.execute("SELECT username FROM accounts JOIN languages "
+                                        "ON accounts.id=languages.account_id").fetchone(), ("owner",))
 
     def test_original_journal(self):
         self.verify_adoption(LEGACY)

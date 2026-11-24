@@ -1,4 +1,5 @@
 import { bindVideoLookup, youtubeVideoId } from "./youtube.js";
+import { initializeAccount, sessionChanged } from "./account.js";
 import { renderCalendar } from "./calendar.js";
 const $ = s => document.querySelector(s);
 const main = $("#main"), dialog = $("#dialog"), selector = $("#languages");
@@ -14,6 +15,7 @@ const icons = {
 };
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">'+icons[name]+'</svg>'}
 document.querySelectorAll("[data-icon]").forEach(el=>el.insertAdjacentHTML("afterbegin",icon(el.dataset.icon)));
+let languagePreference;
 let languages=[], lang=null, activities=[], cards=[], stats, days=7, filter="all", version=0;
 const titles={dashboard:"Dashboard",history:"Activity history",flashcards:"Flashcards"};
 const page=()=>Object.hasOwn(titles,location.hash.slice(1))?location.hash.slice(1):"dashboard";
@@ -22,11 +24,12 @@ function local(day){return new Date(day+"T12:00:00")}
 function duration(m){return (m>=60?Math.floor(m/60)+"h ":"")+(m%60||m<60?m%60+"m":"")}
 async function api(path,method="GET",body){
   const r=await fetch("/api/languages"+path,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(r.status===401) sessionChanged();
   if(!r.ok){const data=await r.json();throw Error(typeof data.detail==="string"?data.detail:data.detail.map(e=>e.loc.at(-1)+" — "+e.msg).join(". "))}
   return r.status===204?null:r.json();
 }
 function notify(message){const n=$("#notice");n.textContent=message;n.hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>n.hidden=true,4500)}
-function choose(id){lang=id;localStorage.setItem("polyglotta.language",id);filter="all";return refresh()}
+function choose(id){lang=id;localStorage.setItem(languagePreference,id);filter="all";return refresh()}
 async function refresh(){
   const v=++version,now=new Date();
   selector.innerHTML=languages.map(l=>'<option value="'+l.id+'">'+esc(l.name)+'</option>').join("")+'<option value="add">＋ Add language</option><option value="demo">Explore demo</option>';
@@ -140,7 +143,7 @@ function field(label,name,value="",type="text",attrs="required maxlength=300"){
 function languageForm(after){
   selector.value=lang??"";
   form("Add a language",field("Language name","name","","text",'required maxlength="80" placeholder="e.g. Japanese"'),"Add language",async data=>{
-    const l=await api("","POST",data);languages.push(l);lang=l.id;localStorage.setItem("polyglotta.language",lang);filter="all";return after;
+    const l=await api("","POST",data);languages.push(l);lang=l.id;localStorage.setItem(languagePreference,lang);filter="all";return after;
   });
 }
 function activityForm(a={}){
@@ -200,8 +203,11 @@ selector.onchange=()=>{
 $("#log").onclick=()=>handle("activity");
 window.addEventListener("hashchange",()=>{if(stats)render()});
 async function init(){
+  const account = await initializeAccount();
+  if (!account) return;
+  languagePreference = "polyglotta.language." + account.id;
   languages=await api("");
-  const previous=Number(localStorage.getItem("polyglotta.language"));
+  const previous=Number(localStorage.getItem(languagePreference));
   lang=languages.find(l=>l.id===previous)?.id??languages[0]?.id??null;
   await refresh();
 }

@@ -1,22 +1,16 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from .db_session import DB
 from .models import Activity, Card, Language
+from .security import User
 
 
-def session(request: Request):
-    with Session(request.app.state.engine, expire_on_commit=False) as db:
-        db.connection(execution_options={"sqlite_write": request.method != "GET"})
-        yield db
-
-
-DB = Annotated[Session, Depends(session)]
-
-
-def active_language(language_id: int, db: DB):
-    if db.get(Language, language_id) is None:
+def active_language(language_id: int, db: DB, user: User):
+    language = db.get(Language, language_id)
+    if language is None or language.account_id != user.id:
         raise HTTPException(404, "Language not found.")
     return language_id
 
