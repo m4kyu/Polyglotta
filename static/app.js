@@ -1,3 +1,4 @@
+import { renderCalendar } from "./calendar.js";
 const $ = s => document.querySelector(s);
 const main = $("#main"), dialog = $("#dialog"), selector = $("#languages");
 const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -71,7 +72,8 @@ function render(){
   const today=new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
   const h='<div class="heading"><h1>'+(p==="dashboard"?"Immersion overview":titles[p])+'</h1>';
   if(p==="dashboard"){
-    main.innerHTML=h+'<span class="date">'+today+'</span></div><section class="hero"><canvas aria-hidden="true"></canvas><div class="eyebrow">TOTAL IMMERSION TIME</div><div class="number">'+Math.floor(stats.total/60)+'<em>h</em>'+stats.total%60+'<em>m</em></div><div class="week">'+icon("trend")+'<b>'+duration(stats.weekly)+'</b> in the last 7 days</div></section><div class="panels">'+chart()+mix()+'</div><section class="panel"><div class="panelhead"><h2>Recent activity</h2><a href="#history" class="textbtn">View history →</a></div>'+rows(activities.slice(0,4),false)+'</section>';
+    main.innerHTML=h+'<span class="date">'+today+'</span></div><section class="hero"><canvas aria-hidden="true"></canvas><div class="eyebrow">TOTAL IMMERSION TIME</div><div class="number">'+Math.floor(stats.total/60)+'<em>h</em>'+stats.total%60+'<em>m</em></div><div class="week">'+icon("trend")+'<b>'+duration(stats.weekly)+'</b> in the last 7 days</div></section><div class="panels">'+chart()+mix()+'</div><section class="panel calendar-panel"></section><section class="panel"><div class="panelhead"><h2>Recent activity</h2><a href="#history" class="textbtn">View history →</a></div>'+rows(activities.slice(0,4),false)+'</section>';
+    renderCalendar($(".calendar-panel"), activities, iso(new Date()));
     import("/static/globe.js").then(({drawGlobe})=>{const c=$("canvas");if(c){drawGlobe(c);globeObserver.disconnect();globeObserver.observe(c)}});
   }else if(p==="history"){
     main.innerHTML=h+'</div><section class="panel"><div class="filters"><label>Show <select id="filter"><option value="all">All activities</option><option value="video">YouTube videos</option><option value="article">Articles</option></select></label></div>'+rows(activities.filter(a=>filter==="all"||a.kind===filter),true)+'</section>';

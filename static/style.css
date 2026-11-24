@@ -2,3 +2,39 @@
 @media(max-width:1100px){aside{width:180px}.workspace{margin-left:180px}.panel{padding:17px}.mix{gap:10px}.ring{width:92px;height:92px}.ring div{width:68px;height:68px}}
 @media(max-width:820px){aside{position:static;width:auto;padding:12px 18px;flex-flow:row wrap;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.brand{font-size:23px;padding:0}.brandmark{width:28px;height:28px;font-size:25px}.navlabel,.profile{display:none}nav{display:flex}nav a{font-size:12px;padding:8px;margin:0;gap:5px}.workspace{margin:0}.panels{grid-template-columns:minmax(0,1.45fr) minmax(195px,1fr)}}
 @media(max-width:600px){aside{gap:10px}nav{width:100%;justify-content:space-between}header{min-height:55px}.breadcrumb,.date{display:none}.actions{width:100%;justify-content:space-between}.panels{grid-template-columns:1fr}.hero{padding:23px;min-height:153px}.mix{min-height:125px;gap:30px}.entry{flex-wrap:wrap}.row-actions{width:100%;margin-left:45px}.heading{align-items:flex-start}.heading .inline{flex-wrap:wrap;justify-content:flex-end}main{padding-top:23px}}
+
+.calendar-panel { margin-bottom: 18px; }
+.calendar-head, .calendar-foot, .streaks, .calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.calendar-head, .calendar-foot { justify-content: space-between; flex-wrap: wrap; }
+.streaks { gap: 22px; margin: 0; }
+.streaks dt { color: var(--muted); font-size: 12px; }
+.streaks dd { margin: 0; font: 23px Georgia, serif; color: var(--green); }
+.calendar-scroll { overflow-x: auto; margin: 16px 0 12px; padding: 4px; }
+.calendar-grid {
+  display: grid;
+  grid-template-columns: 30px repeat(53, minmax(9px, 1fr));
+  grid-template-rows: 18px repeat(7, auto);
+  gap: 3px;
+  align-items: center;
+}
+.month-label, .weekday-label, .calendar-foot { color: var(--muted); font-size: 11px; }
+.month-label { align-self: start; }
+.calendar-day, .calendar-legend i {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid #173d3214;
+  border-radius: 3px;
+  padding: 0;
+}
+.calendar-day:hover { outline: 2px solid var(--green); }
+.level-0 { background: #edf0e9; }
+.level-1 { background: #c6dfbb; }
+.level-2 { background: #91be8f; }
+.level-3 { background: #538e69; }
+.level-4 { background: #23583e; }
+.calendar-legend { gap: 4px; }
+.calendar-legend i { width: 11px; }
