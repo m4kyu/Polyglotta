@@ -1,3 +1,5 @@
+import { progressPanel } from "./anki.js";
+let anki, ankiDays=7;
 import { bindVideoLookup, youtubeVideoId } from "./youtube.js";
 import { initializeAccount, sessionChanged } from "./account.js";
 import { renderCalendar } from "./calendar.js";
@@ -36,9 +38,9 @@ async function refresh(){
   if (!lang) selector.insertAdjacentHTML("afterbegin", '<option disabled value="">Choose a language</option>');
   selector.value=lang??"";
   if(lang){
-    const result=await Promise.all(["/activities","/cards","/statistics?days="+days+"&today="+iso(now)].map(p=>api("/"+lang+p)));
+    const result=await Promise.all(["/activities","/cards","/anki?days="+ankiDays,"/statistics?days="+days+"&today="+iso(now)].map(p=>api("/"+lang+p)));
     if(v!==version)return;
-    [activities,cards,stats]=result;
+    [activities,cards,anki,stats]=result;
   }else{
     activities=[];cards=[];stats={total:0,weekly:0,by_type:{video:0,article:0},days:Array.from({length:days},(_,i)=>{const d=new Date(now);d.setDate(d.getDate()-days+i+1);return {day:iso(d),video:0,article:0}})};
   }
@@ -105,13 +107,14 @@ function render(){
   if(p==="dashboard"){
     const headingAction = lang ? '<span class="date">'+today+'</span>' : action("demo","Explore demo");
     main.innerHTML=h+headingAction+'</div><section class="hero"><canvas aria-hidden="true"></canvas><div class="eyebrow">TOTAL IMMERSION TIME</div><div class="number">'+Math.floor(stats.total/60)+'<em>h</em>'+stats.total%60+'<em>m</em></div><div class="week">'+icon("trend")+'<b>'+duration(stats.weekly)+'</b> in the last 7 days</div></section><div class="panels">'+chart()+mix()+'</div><section class="panel calendar-panel"></section><section class="panel"><div class="panelhead"><h2>Recent activity</h2><a href="#history" class="textbtn">View history →</a></div>'+rows(activities.slice(0,4),false)+'</section>';
+    if(lang) $(".calendar-panel").insertAdjacentHTML("beforebegin",progressPanel(anki,esc,action,ankiDays));
     renderCalendar($(".calendar-panel"), activities, iso(new Date()));
     import("/static/globe.js").then(({drawGlobe})=>{const c=$("canvas");if(c){drawGlobe(c);globeObserver.disconnect();globeObserver.observe(c)}});
   }else if(p==="history"){
     main.innerHTML=h+'</div><section class="panel"><div class="filters"><label>Show <select id="filter"><option value="all">All activities</option><option value="video">YouTube videos</option><option value="article">Articles</option></select></label></div>'+rows(activities.filter(a=>filter==="all"||a.kind===filter),true)+'</section>';
     $("#filter").value=filter;
   }else{
-    main.innerHTML=h+'<div class="inline">'+(cards.length?action("practice","Practice")+action("card","＋ Add card","","primary"):"")+'</div></div><section class="panel"><h2>Your deck</h2>'+(cards.length?cards.map(c=>'<div class="entry"><div class="entry-text"><b>'+esc(c.front)+'</b><div>'+esc(c.back)+'</div>'+link(c.url,"Source ↗")+'</div><div class="row-actions">'+action("card","Edit",c.id)+action("del-cards","Delete",c.id)+'</div></div>').join(""):empty("cards"))+'</section>';
+    main.innerHTML=h+'<div class="inline">'+(cards.length?action("practice","Practice")+action("card","＋ Add card","","primary"):"")+'</div></div><section class="panel"><h2>Your deck</h2>'+(cards.length?cards.map(c=>'<div class="entry"><div class="entry-text"><b>'+esc(c.front)+'</b><div>'+esc(c.back)+'</div>'+link(c.url,"Source ↗")+'</div><div class="row-actions">'+(anki?.linked?action("send-anki",anki.exports[c.id] || "Send to Anki",c.id):"")+action("card","Edit",c.id)+action("del-cards","Delete",c.id)+'</div></div>').join(""):empty("cards"))+'</section>';
   }
 }
 const globeObserver=new ResizeObserver(async entries=>{const {drawGlobe}=await import("/static/globe.js");for(const {target} of entries)if(target.isConnected)drawGlobe(target)});
@@ -172,10 +175,28 @@ async function loadDemo(){
   languages = await api("");
   await choose(demo.language_id);
 }
-function handle(actionName,id){
+async function handle(actionName,id){
+  if(actionName==="anki-decks"){
+    const elsewhere=anki.decks.filter(d=>anki.roots[d.id] && anki.roots[d.id]!==lang);
+    const options=anki.decks.map(deck=>{
+      const conflict=elsewhere.some(other=>other.id===deck.id || other.name.startsWith(deck.name+"::") || deck.name.startsWith(other.name+"::"));
+      return '<label><input type="checkbox" name="deck" value="'+deck.id+'" '+(anki.roots[deck.id]===lang?'checked ':'')+(conflict?'disabled':'')+'> '+esc(deck.name)+(conflict?' (mapped elsewhere)':'')+'</label>';
+    }).join("");
+    return form("Map Anki decks",'<p>Includes subdecks. Review history follows the current home deck.</p>'+options,"Save",()=>api("/"+lang+"/anki/decks","PUT",{decks:Array.from(dialog.querySelectorAll("[name=deck]:checked"),el=>Number(el.value))}));
+  }
+  if(actionName==="send-anki"){
+    if(anki.exports[id]==="Sent")return notify("Already sent. Sync Anki to receive this card.");
+    if(anki.exports[id]==="Queued"){await refresh();return notify(anki.exports[id] || "Refresh the deck to see its status.")}
+    if(!anki.mapped.length)return notify("Map a deck on the dashboard first.");
+    const send=deck=>api("/"+lang+"/cards/"+id+"/anki","POST",{deck});
+    if(anki.mapped.length===1){await send(anki.mapped[0]);return refresh()}
+    const options=anki.decks.filter(d=>anki.mapped.includes(d.id)).map(d=>'<option value="'+d.id+'">'+esc(d.name)+'</option>').join("");
+    return form("Send to Anki",'<label>Destination deck<select name="deck">'+options+'</select></label>',"Send",data=>send(Number(data.deck)));
+  }
   if(actionName==="demo")return loadDemo();
   if(actionName==="language")return languageForm();
   if(actionName==="range"){days=id;return refresh()}
+  if(actionName==="anki-range"){ankiDays=id;return refresh()}
   if(!lang)return languageForm(()=>handle(actionName,id));
   const a=activities.find(v=>v.id===id),c=cards.find(v=>v.id===id);
   if(actionName==="preview")return previewVideo(a);
@@ -212,3 +233,26 @@ async function init(){
   await refresh();
 }
 init().catch(err=>{main.textContent="Could not load the workspace. "+err.message});
+
+
+// Refresh visible Anki data while the learner is studying on another device.
+let updatingAnki = false;
+setInterval(async () => {
+  if (document.hidden || dialog.open || !lang || !anki?.linked || updatingAnki) return;
+  const current = version;
+  updatingAnki = true;
+  try {
+    const updated = await api("/"+lang+"/anki?days="+ankiDays);
+    if (version !== current || dialog.open) return;
+    anki = updated;
+    const panel = $(".anki");
+    if (panel) panel.outerHTML = progressPanel(anki,esc,action,ankiDays);
+    main.querySelectorAll('[data-action="send-anki"]').forEach(button => {
+      button.textContent = anki.exports?.[button.dataset.id] || "Send to Anki";
+    });
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    updatingAnki = false;
+  }
+}, 30000);

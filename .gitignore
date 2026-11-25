@@ -1,3 +1,5 @@
 .venv/
+.anki-venv/
 __pycache__/
 data/
+brief.md

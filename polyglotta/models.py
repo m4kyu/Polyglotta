@@ -68,3 +68,46 @@ class Card(Base):
     front: Mapped[str] = mapped_column(Text)
     back: Mapped[str] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(Text)
+
+
+class AnkiLink(Base):
+    __tablename__ = "anki_links"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
+    generation: Mapped[str] = mapped_column(Text)
+    snapshot: Mapped[str | None] = mapped_column(Text)
+    updated: Mapped[int | None]
+    message: Mapped[str | None] = mapped_column(Text)
+    paused: Mapped[int] = mapped_column(server_default="0")
+
+
+class AnkiDeckMap(Base):
+    __tablename__ = "anki_maps"
+
+    language_id: Mapped[int] = mapped_column(ForeignKey("languages.id", ondelete="CASCADE"), primary_key=True)
+    deck: Mapped[int] = mapped_column(primary_key=True)
+
+
+class AnkiExport(Base):
+    __tablename__ = "anki_exports"
+
+    card_id: Mapped[int] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"), primary_key=True)
+    guid: Mapped[str] = mapped_column(Text, unique=True)
+    deck: Mapped[int]
+    front: Mapped[str] = mapped_column(Text)
+    back: Mapped[str] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(Text, server_default="Queued")
+
+
+class AnkiGate(Base):
+    __tablename__ = "anki_gate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ready: Mapped[int]
+
+
+class AnkiCleanup(Base):
+    __tablename__ = "anki_cleanup"
+
+    account_id: Mapped[int] = mapped_column(primary_key=True)

@@ -9,7 +9,8 @@ def normalize_rowid(inspector, table, column):
     # SQLite reports legacy INTEGER PRIMARY KEY columns as nullable even though
     # the rowid always has a value. Normalize this during Alembic reflection.
     legacy_keys = {"activities": "id", "cards": "id", "languages": "id",
-                   "demo_journals": "language_id"}
+                   "demo_journals": "language_id", "anki_links": "account_id",
+                   "anki_exports": "card_id", "anki_gate": "id", "anki_cleanup": "account_id"}
     if (inspector.bind.dialect.name == "sqlite"
             and column["name"] == legacy_keys.get(table.name)
             and column.get("primary_key") and type(column["type"]) is INTEGER):

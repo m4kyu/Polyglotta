@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import database
 from .security import current_account
-from .routes import auth, activities, cards, languages, statistics, youtube
+from .routes import anki, auth, activities, cards, languages, statistics, youtube
 
 
 def create_app(database_path: Path | None = None) -> FastAPI:
@@ -54,6 +54,7 @@ def create_app(database_path: Path | None = None) -> FastAPI:
         return await request_validation_exception_handler(request, error)
 
     app.include_router(auth.router)
+    app.include_router(anki.router)
     for router in (languages.router, activities.router, cards.router, statistics.router):
         app.include_router(router, prefix="/api/languages")
 

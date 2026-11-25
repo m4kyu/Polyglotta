@@ -1,0 +1,18 @@
+[Unit]
+Description=Polyglotta Anki sync server and review worker
+After=network.target
+
+[Service]
+Type=simple
+User=polyglotta
+WorkingDirectory=/opt/polyglotta
+EnvironmentFile=/etc/polyglotta/anki.env
+ExecStart=/opt/polyglotta/.anki-venv/bin/python -m polyglotta.anki_service serve
+Restart=on-failure
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

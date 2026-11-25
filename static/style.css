@@ -83,3 +83,14 @@ dialog:has(.video-player) .foot { align-items: center; }
 #auth { width: min(420px, 90vw); margin: 10vh auto; padding: 2rem; background: white; border-radius: 12px; }
 #auth h1 { color: var(--green); }
 #auth label, #auth input { display: block; width: 100%; margin-bottom: .8rem; }
+.anki { margin-bottom: 18px; }
+.anki-bars { display:flex; height:80px; gap:3px; margin:16px 0 8px; border-bottom:1px solid var(--muted); }
+.anki-day { flex:1; display:flex; flex-direction:column-reverse; justify-content:flex-start; }
+.anki-key { display:inline-block; width:9px; height:9px; margin-right:4px; }
+.rating-0 { background:#b75441; } .rating-1 { background:#c49939; }
+.rating-2 { background:#44836a; } .rating-3 { background:#3e6891; }
+.anki-summary, .anki-legend, .anki-axis { display:flex; flex-wrap:wrap; gap:12px 24px; }
+.anki-summary { margin:14px 0; }
+.anki-summary strong { display:block; font:24px Georgia, serif; color:var(--green); }
+.anki-axis { justify-content:space-between; }
+.anki-legend { margin:12px 0; font-size:13px; }
