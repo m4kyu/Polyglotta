@@ -40,6 +40,6 @@ class AnkiIsolationTests(TestCase):
                 client.cookies.set("__Host-polyglotta",cookie)
                 client.request("DELETE","/api/account",json={"password":"long password sample"}).raise_for_status()
                 with app.state.engine.connect() as db:
-                    self.assertEqual(db.exec_driver_sql("SELECT * FROM anki_cleanup").all(),[(1,)])
+                    self.assertEqual(db.exec_driver_sql("SELECT account_id FROM anki_cleanup").all(),[(1,)])
                     self.assertEqual(db.exec_driver_sql("SELECT * FROM anki_exports").all(),[])
                     self.assertEqual(db.exec_driver_sql("SELECT ready FROM anki_gate").scalar(),0)

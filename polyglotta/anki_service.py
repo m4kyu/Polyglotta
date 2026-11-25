@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import signal
@@ -16,6 +17,7 @@ import time
 
 from sqlalchemy import delete, insert, select, update
 
+from .anki_provisioning import LinkConflict, provisioning_server
 from .database import make_engine
 from .models import Account, AnkiCleanup, AnkiDeckMap, AnkiExport, AnkiGate, AnkiLink, Card, Language
 
@@ -28,21 +30,22 @@ def secret_path(uid, generation):
     return ROOT / "users" / f"p{uid}" / generation
 
 
-def provision(engine, action, username):
+def provision(engine, action, username=None, *, account_id=None, sync_username=None, password=None):
     with engine.execution_options(sqlite_write=True).begin() as db:
-        uid = db.scalar(select(Account.id).where(Account.username == username))
+        profile = Account.id == account_id if account_id is not None else Account.username == username
+        uid = db.scalar(select(Account.id).where(profile))
         if uid is None:
-            raise SystemExit("Unknown profile.")
+            raise LinkConflict("Unknown profile.")
         link = db.execute(
-            select(AnkiLink.generation, AnkiLink.paused).where(AnkiLink.account_id == uid)
+            select(AnkiLink.generation, AnkiLink.paused, AnkiLink.sync_username).where(AnkiLink.account_id == uid)
         ).one_or_none()
         if action == "link" and link:
-            raise SystemExit("Already linked. Use rotate to replace the credentials.")
+            raise LinkConflict("Already linked. Use rotate to replace the credentials.")
         if action != "link" and not link:
-            raise SystemExit("Profile has no Anki link.")
+            raise LinkConflict("Profile has no Anki link.")
         if action == "resume":
             if not link.paused:
-                raise SystemExit("This collection is not paused.")
+                raise LinkConflict("This collection is not paused.")
             # A full download replaces only the worker replica. Keep the old database
             # and SQLite sidecars together until account cleanup.
             folder = secret_path(uid, link.generation).parent
@@ -61,8 +64,18 @@ def provision(engine, action, username):
             db.execute(delete(AnkiExport).where(AnkiExport.card_id.in_(cards)))
             return
         if db.scalar(select(AnkiCleanup.account_id).where(AnkiCleanup.account_id == uid)) is not None:
-            raise SystemExit("Wait for revoked data to be removed before relinking.")
-        password = secrets.token_urlsafe(32)
+            raise LinkConflict("Wait for revoked data to be removed before relinking.")
+        if sync_username is not None:
+            if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", sync_username) or re.fullmatch(r"[pP][0-9]+", sync_username):
+                raise LinkConflict("Choose a username using letters, digits, underscores or hyphens. Names like p123 are reserved.")
+            for model in (AnkiLink, AnkiCleanup):
+                if db.scalar(select(model.account_id).where(model.sync_username == sync_username)) is not None:
+                    raise LinkConflict("That sync username is unavailable.")
+            if not isinstance(password, str) or not 15 <= len(password) <= 128:
+                raise LinkConflict("Use a password of 15 to 128 characters.")
+        else:
+            sync_username = link.sync_username if link else None
+            password = secrets.token_urlsafe(32)
         salt = secrets.token_bytes(16)
         derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 210000)
 
@@ -77,14 +90,14 @@ def provision(engine, action, username):
         if link:
             db.execute(update(AnkiLink).where(AnkiLink.account_id == uid).values(generation=generation))
         else:
-            db.execute(insert(AnkiLink).values(account_id=uid, generation=generation))
+            db.execute(insert(AnkiLink).values(account_id=uid, generation=generation, sync_username=sync_username))
     if link:
         secret_path(uid, link.generation).unlink(missing_ok=True)
-    print(f"Sync username: p{uid}\nOne-time password: {password}")
+    return {"username": sync_username or f"p{uid}", "password": password}
 
 
 def linked_profiles(db):
-    query = select(AnkiLink.account_id, AnkiLink.generation).order_by(AnkiLink.account_id)
+    query = select(AnkiLink.account_id, AnkiLink.generation, AnkiLink.sync_username).order_by(AnkiLink.account_id)
     return db.execute(query).all()
 
 
@@ -123,10 +136,10 @@ def serve(engine):
                     SYNC_BASE=str(ROOT / "server"),
                     PASSWORDS_HASHED="1",
                 )
-                for i, (uid, generation) in enumerate(links, 1):
+                for i, (uid, generation, name) in enumerate(links, 1):
                     path = secret_path(uid, generation)
                     try:
-                        env[f"SYNC_USER{i}"] = f"p{uid}:" + path.read_text()
+                        env[f"SYNC_USER{i}"] = (name or f"p{uid}") + ":" + path.read_text()
                     except FileNotFoundError:
                         break
                 if any(f"SYNC_USER{i}" not in env for i in range(1, len(links) + 1)):
@@ -157,19 +170,19 @@ def serve(engine):
                 configured = links
                 next_check.clear()
             with engine.connect() as db:
-                pending_cleanup = db.scalars(select(AnkiCleanup.account_id)).all()
-            for uid in pending_cleanup:
-                if any(id_ == uid for id_, _ in configured):
+                pending_cleanup = db.execute(select(AnkiCleanup.account_id, AnkiCleanup.sync_username)).all()
+            for uid, name in pending_cleanup:
+                if any(id_ == uid for id_, _, _ in configured):
                     continue
                 for directory in (
                     ROOT / "users" / f"p{uid}",
-                    ROOT / "server" / f"p{uid}",
+                    ROOT / "server" / (name or f"p{uid}"),
                 ):
                     if directory.exists():
                         shutil.rmtree(directory)
                 with engine.begin() as db:
                     db.execute(delete(AnkiCleanup).where(AnkiCleanup.account_id == uid))
-            for uid, generation in links:
+            for uid, generation, name in links:
                 with engine.connect() as db:
                     link = db.execute(select(AnkiLink).where(
                         AnkiLink.account_id == uid, AnkiLink.generation == generation
@@ -184,7 +197,7 @@ def serve(engine):
                     continue
                 next_check[uid] = time.monotonic() + 300
                 try:
-                    if not (ROOT / "server" / f"p{uid}" / "collection.anki2").exists():
+                    if not (ROOT / "server" / (name or f"p{uid}") / "collection.anki2").exists():
                         next_check[uid] = time.monotonic() + 5
                         continue
                     refresh(engine, link, jobs, secret_path(uid, generation), PORT)
@@ -222,9 +235,15 @@ def main():
             with (ROOT / "service.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-                serve(engine)
+                with provisioning_server(lambda uid, **fields: provision(engine, "link", account_id=uid, **fields)):
+                    serve(engine)
         else:
-            provision(engine, args.action, args.username)
+            try:
+                credentials = provision(engine, args.action, args.username)
+            except LinkConflict as error:
+                raise SystemExit(str(error)) from None
+            if credentials:
+                print(f"Sync username: {credentials['username']}\nOne-time password: {credentials['password']}")
     finally:
         engine.dispose()
 

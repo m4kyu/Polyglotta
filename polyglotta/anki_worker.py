@@ -55,7 +55,8 @@ def refresh(engine, link, jobs, secret, port):
     uid = link["account_id"]
     # The pinned official server derives its sync bearer key from the configured
     # username:PHC string. Keep that credential exclusively in the service directory.
-    key = sha1(f"p{uid}:{secret.read_text()}".encode()).hexdigest()
+    username = link["sync_username"] or f"p{uid}"
+    key = sha1(f"{username}:{secret.read_text()}".encode()).hexdigest()
     auth = SyncAuth(hkey=key, endpoint=f"http://127.0.0.1:{port}/", io_timeout_secs=60)
     col = Collection(str(secret.parent/"collection.anki2"))
     try:

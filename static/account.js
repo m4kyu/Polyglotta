@@ -46,19 +46,106 @@ function bindForm(form, submit) {
   };
 }
 
-function showSettings(account) {
+const closeButton = '<button type="button" class="settings-close" data-close aria-label="Close">×</button>';
+const backButton = '<button type="button" class="settings-back">← Back to account</button>';
+let profile;
+
+function settingsPanel(title, content, backTo) {
+  const panel = document.createElement("section");
+  panel.className = "settings-panel";
+  panel.innerHTML = `<div class="settings-tools">${backTo ? backButton : ""}${closeButton}</div>
+    <h2 id="modalTitle" tabindex="-1">${title}</h2>${content}`;
   const body = document.querySelector("#dialogBody");
-  body.innerHTML = '<h2>Account</h2><p></p><button id="anki-settings">Anki</button> <button id="logout">Sign out</button> <button id="delete-profile">Delete account…</button> <button data-close>Close</button><p class="error" role="alert"></p>';
-  body.querySelector("p").textContent = account.username;
-  dialog.showModal();
-  body.querySelector("#anki-settings").onclick = async () => {
-    try {
-      const info = await accountRequest("anki","GET");
-      body.innerHTML = '<h2>Anki sync</h2><p></p><pre></pre><button data-close>Close</button>';
-      body.querySelector("p").textContent = info.linked ? "Back up the device with your complete collection. Set the custom sync server in Anki Desktop and AnkiDroid settings. Upload from that device first, then download on the other. Use your separate sync password." : "Ask the host operator to link your profile to an Anki collection.";
-      body.querySelector("pre").textContent = info.linked ? [info.endpoint || "Ask the operator for the server URL.",info.username,info.message].filter(Boolean).join("\n") : "";
-    } catch(error) { body.querySelector(".error").textContent = error.message; }
+  body.replaceChildren(panel);
+  dialog.setAttribute("aria-labelledby", "modalTitle");
+  if (!dialog.open) dialog.showModal();
+  panel.querySelector("h2").focus();
+  if (backTo) panel.querySelector(".settings-back").onclick = () => {
+    showSettings();
+    document.querySelector(backTo).focus();
   };
+  return panel;
+}
+
+export async function showAnkiSettings() {
+  const panel = settingsPanel("Anki sync", `
+    <p class="settings-status" role="status">Loading…</p>
+    <form hidden>
+      <label>Anki username<input name="username" autocomplete="username" pattern="[A-Za-z0-9_\\-]{1,64}" maxlength="64" required aria-describedby="username-hint"></label>
+      <small id="username-hint">Use letters, digits, underscores or hyphens. Names like p123 are reserved.</small>
+      <label>Anki password<input name="password" type="password" minlength="15" maxlength="128" autocomplete="new-password" required aria-describedby="password-hint"></label>
+      <small id="password-hint">Use 15 to 128 characters.</small>
+      <button class="primary">Connect</button>
+    </form>
+    <div class="connection-details" hidden><dl><dt>Server URL</dt><dd></dd><dt>Username</dt><dd></dd></dl>
+      <h3>First sync</h3><ol><li>Back up the device with your complete collection. Enter the custom server URL and your Anki credentials, then choose <strong>Upload</strong>.</li>
+      <li>On each additional device, enter the same connection details and choose <strong>Download</strong>.</li></ol></div>
+    <p class="error" role="alert"></p>`, "#anki-settings");
+  const status = panel.querySelector('[role="status"]');
+  const details = panel.querySelector(".connection-details");
+  const form = panel.querySelector("form");
+  const connect = panel.querySelector(".primary");
+  const errorText = panel.querySelector(".error");
+
+  function render(info, justConnected = false) {
+    form.hidden = info.linked || !info.endpoint;
+    if (!info.linked) {
+      status.textContent = info.endpoint ? "Connect your profile to hosted Anki sync." : "Anki sync is unavailable on this host.";
+      return;
+    }
+    form.reset();
+    const guidance = justConnected ? "Use your chosen Anki username and password to sync." : "If you lost your sync password, ask the host operator to rotate it.";
+    status.textContent = [guidance, info.message].filter(Boolean).join(" ");
+    if (justConnected) {
+      dialog.addEventListener("close", () => dialog.dispatchEvent(new Event("anki-connected")), {once: true});
+      panel.querySelector("h2").focus();
+    }
+    details.hidden = false;
+    const [endpoint, username] = details.querySelectorAll("dd");
+    endpoint.textContent = info.endpoint || "Ask the operator for the server URL.";
+    username.textContent = info.username;
+
+  }
+
+  dialog.addEventListener("close", () => panel.remove(), {once: true});
+  try {
+    render(await accountRequest("anki", "GET"));
+  } catch (error) {
+    status.textContent = "";
+    errorText.textContent = error.message;
+  }
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (connect.disabled) return;
+    connect.disabled = true;
+    errorText.textContent = "";
+    try {
+      render({...await accountRequest("anki/connect", "POST", Object.fromEntries(new FormData(form))), linked: true}, true);
+    } catch (error) {
+      errorText.textContent = error.message;
+      try {
+        const info = await accountRequest("anki", "GET");
+        render(info);
+        if (info.linked) errorText.textContent = "";
+      } catch {
+        status.textContent = "Reopen Anki settings to check your connection.";
+      }
+    } finally {
+      connect.disabled = false;
+    }
+  };
+}
+
+function showSettings() {
+  const body = settingsPanel("Account settings", `
+    <div class="settings-identity"><span class="avatar" aria-hidden="true"></span><strong></strong></div>
+    <button id="anki-settings" class="settings-row"><span>Anki sync</span><span aria-hidden="true">→</span></button>
+    <button id="logout">Sign out</button>
+    <div class="delete-row"><button id="delete-profile">Delete account…</button></div>
+    <p class="error" role="alert"></p>`);
+  body.querySelector(".avatar").textContent = profile.username[0].toUpperCase();
+  body.querySelector(".settings-identity strong").textContent = profile.username;
+  body.querySelector("#anki-settings").onclick = showAnkiSettings;
   body.querySelector("#logout").onclick = async () => {
     try {
       await accountRequest("auth/logout", "POST");
@@ -68,8 +155,8 @@ function showSettings(account) {
     }
   };
   body.querySelector("#delete-profile").onclick = () => {
-    body.innerHTML = '<h2>Delete your account?</h2><p>This permanently deletes your account, languages, history and cards from the live journal and signs out every device. Hosted Anki data will be removed. Downloaded device copies remain on your devices. Backup copies expire according to the host’s retention policy.</p><form><label>Current password<input type="password" name="password" required autocomplete="current-password"></label><p class="error" role="alert"></p><button type="button" data-close>Cancel</button> <button class="primary">Permanently delete account</button></form>';
-    bindForm(body.querySelector("form"), data => accountRequest("account", "DELETE", data));
+    const confirmation = settingsPanel('Delete your account?', '<p>This permanently deletes your account, languages, history and cards from the live journal and signs out every device. Hosted Anki data will be removed. Downloaded device copies remain on your devices. Backup copies expire according to the host’s retention policy.</p><form><label>Current password<input type="password" name="password" required autocomplete="current-password"></label><p class="error" role="alert"></p><button class="danger">Permanently delete account</button></form>', "#delete-profile");
+    bindForm(confirmation.querySelector("form"), data => accountRequest("account", "DELETE", data));
   };
 }
 
@@ -92,7 +179,9 @@ export async function initializeAccount() {
   if (account) {
     document.querySelector(".profile b").textContent = account.username;
     document.querySelector(".avatar").textContent = account.username[0].toUpperCase();
-    document.querySelector("#account").onclick = () => showSettings(account);
+    profile = account;
+    document.querySelector("#account").onclick = showSettings;
+    document.querySelector(".profile").onclick = showSettings;
     document.body.classList.remove("signed-out");
   }
   return account;

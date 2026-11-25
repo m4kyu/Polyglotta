@@ -72,6 +72,8 @@ class Card(Base):
 
 class AnkiLink(Base):
     __tablename__ = "anki_links"
+    __table_args__ = (Index("anki_username", "sync_username", unique=True),)
+    sync_username: Mapped[str | None] = mapped_column(Text(collation="NOCASE"))
 
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
     generation: Mapped[str] = mapped_column(Text)
@@ -109,5 +111,6 @@ class AnkiGate(Base):
 
 class AnkiCleanup(Base):
     __tablename__ = "anki_cleanup"
+    sync_username: Mapped[str | None] = mapped_column(Text(collation="NOCASE"))
 
     account_id: Mapped[int] = mapped_column(primary_key=True)

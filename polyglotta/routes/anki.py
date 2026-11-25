@@ -9,7 +9,9 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from ..anki_provisioning import LinkConflict, request_link
 from ..dependencies import DB, LanguageID, User, scoped_entry
+from ..security import Credentials
 from ..models import Card
 
 router = APIRouter(prefix="/api", tags=["Anki"])
@@ -37,8 +39,25 @@ def connection(db, user):
 @router.get("/anki")
 def status(db: DB, user: User):
     link = connection(db, user)
-    return {"linked": bool(link), "username": f"p{user.id}" if link else None,
+    return {"linked": bool(link), "username": (link["sync_username"] or f"p{user.id}") if link else None,
             "endpoint": os.getenv("POLYGLOTTA_ANKI_URL"), "message": link and link["message"]}
+
+
+@router.post("/anki/connect", status_code=201)
+def connect(db: DB, user: User, data: Credentials | None = None):
+    endpoint = os.getenv("POLYGLOTTA_ANKI_URL")
+    if not endpoint:
+        raise HTTPException(503, "Anki sync is unavailable on this host.")
+    uid = user.id
+    db.close()  # Release the request's SQLite writer lock before provisioning.
+    try:
+        fields = {"sync_username": data.username, "password": data.password.get_secret_value()} if data else {}
+        username, password = request_link(uid, **fields)
+    except LinkConflict as error:
+        raise HTTPException(409, str(error)) from None
+    except (OSError, ValueError, KeyError) as error:
+        raise HTTPException(503, "Anki sync is unavailable. Try again shortly.") from error
+    return {"endpoint": endpoint, "username": username, **({"password": password} if password else {})}
 
 
 def assignments(db, user, decks):

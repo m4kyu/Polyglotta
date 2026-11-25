@@ -6,6 +6,9 @@ After=network.target
 Type=simple
 User=polyglotta
 WorkingDirectory=/opt/polyglotta
+RuntimeDirectory=polyglotta-anki
+RuntimeDirectoryMode=0750
+Environment=POLYGLOTTA_ANKI_SOCKET=/run/polyglotta-anki/provision.sock
 EnvironmentFile=/etc/polyglotta/anki.env
 ExecStart=/opt/polyglotta/.anki-venv/bin/python -m polyglotta.anki_service serve
 Restart=on-failure

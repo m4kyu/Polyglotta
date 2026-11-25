@@ -28,24 +28,34 @@ with tempfile.TemporaryDirectory() as tmp:
     os.environ.update(POLYGLOTTA_DB=tmp+"/journal.db",POLYGLOTTA_ANKI_DIR=tmp+"/anki",POLYGLOTTA_ANKI_PORT=str(port),RUST_LOG="error")
     subprocess.run([str(root/".venv/bin/python"),"-c","from polyglotta.database import database_path, make_engine, migrate; migrate(make_engine(database_path()))"],check=True)
     db=sqlite3.connect(os.environ["POLYGLOTTA_DB"])
-    db.execute("insert into accounts(username) values('test')")
-    db.execute("insert into languages(name,account_id) values('French',1)")
-    db.execute("insert into cards(language_id,front,back) values(1,'Hello','Bonjour')")
-    db.commit()
+    endpoint = f"http://127.0.0.1:{port}/"
+    os.environ["POLYGLOTTA_ANKI_URL"] = endpoint
     cli=[sys.executable,"-m","polyglotta.anki_service"]
-    result=subprocess.check_output(cli+["link","test"],text=True)
-    pw=result.strip().splitlines()[-1].split()[-1]
     svc=subprocess.Popen(cli+["serve"])
     try:
+        wait(lambda: (Path(tmp)/"anki"/"provision.sock").is_socket())
+        signup = """
+import json
+from fastapi.testclient import TestClient
+from polyglotta.application import create_app
+with TestClient(create_app(), base_url='https://test', headers={'Origin':'http://127.0.0.1:8000'}) as client:
+    client.post('/api/auth/register', json={'username':'test','password':'long password sample'}).raise_for_status()
+    response = client.post('/api/anki/connect', json={'username':'learner_one','password':'my own sync password'})
+    response.raise_for_status()
+    print(json.dumps(response.json()))
+"""
+        credentials = json.loads(subprocess.check_output([str(root/".venv/bin/python"), "-c", signup]))
+        db.execute("insert into languages(name,account_id) values('French',1)")
+        db.execute("insert into cards(language_id,front,back) values(1,'Hello','Bonjour')")
+        db.commit()
         wait(lambda: db.execute("select ready from anki_gate").fetchone()[0])
         time.sleep(.8)
-        endpoint=f"http://127.0.0.1:{port}/"
         def device(name):
             folder=Path(tmp)/name
             folder.mkdir()
             return Collection(str(folder/"collection.anki2"))
         a=device("desktop")
-        auth=a.sync_login("p1",pw,endpoint)
+        auth=a.sync_login(credentials["username"], "my own sync password", credentials["endpoint"])
         note=a.new_note(a.models.by_name("Basic"))
         note["Front"]="Test"
         note["Back"]="Response"
@@ -92,7 +102,7 @@ with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(cli+["revoke","test"],check=True)
         assert not db.execute("select ready from anki_gate").fetchone()[0]
         wait(lambda: not db.execute("select 1 from anki_cleanup").fetchone())
-        assert not (Path(tmp)/"anki/server/p1").exists()
+        assert not (Path(tmp)/"anki/server/learner_one").exists()
         assert not (Path(tmp)/"anki/users/p1").exists()
         print("Two-client sync, media, rating, export and snapshot passed.")
     finally:

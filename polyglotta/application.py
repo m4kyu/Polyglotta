@@ -48,7 +48,7 @@ def create_app(database_path: Path | None = None) -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):
         # Authentication validation must never echo the submitted body or password.
-        if request.url.path.startswith("/api/auth/") or request.url.path == "/api/account":
+        if request.url.path.startswith("/api/auth/") or request.url.path in {"/api/account", "/api/anki/connect"}:
             return JSONResponse({"detail": "Invalid account details."}, status_code=422)
         from fastapi.exception_handlers import request_validation_exception_handler
         return await request_validation_exception_handler(request, error)

@@ -8,7 +8,7 @@ function studyTime(milliseconds) {
 
 export function progressPanel(info, escape, action, days) {
   const header = '<section class="panel anki"><div class="panelhead"><h2>Anki progress</h2>';
-  if (!info?.linked) return header+'</div><p>Open Account → Anki to connect your devices.</p></section>';
+  if (!info?.linked) return header+action("anki-connect","Connect Anki")+'</div><p>Connect your collection to see reviews for this language.</p></section>';
   const manage = info.decks.length ? action("anki-decks","Map decks") : "";
   const notice = info.message ? '<p role="status">'+escape(info.message)+'</p>' : "";
   if (!info.updated) return header+'</div>'+notice+'<p>Waiting for the first collection sync.</p></section>';
@@ -27,10 +27,9 @@ export function progressPanel(info, escape, action, days) {
   }).join('');
   const active = series.filter(([,row])=>answers(row)>0).length;
   const legend = ratings.map((name,index)=>'<span><i class="anki-key rating-'+index+'"></i>'+name+'</span>').join('');
-  return header+manage+'</div>'+notice+
-    '<div class="panelhead"><span>Review history</span><div class="seg">'+ranges+'</div></div><div class="anki-summary"><div><small>Study day · '+lastDay+'</small><strong>'+answers(today)+' reviews</strong></div>'+
+  return header+'<div class="seg">'+ranges+'</div></div>'+notice+'<div class="anki-summary"><div><small>Study day · '+lastDay+'</small><strong>'+answers(today)+' reviews</strong></div>'+
     '<div><small>Recorded study time</small><strong>'+studyTime(today[4])+'</strong></div>'+
     '<div><small>Active study days</small><strong>'+active+' / '+series.length+'</strong></div></div>'+
-    '<div class="anki-bars">'+bars+'</div><div class="anki-axis"><small>'+series[0][0]+'</small><small>'+lastDay+'</small></div>'+
-    '<div class="anki-legend">'+legend+'</div>'+updated+'</section>';
+    '<div class="anki-bars" data-days="'+days+'">'+bars+'</div><div class="anki-axis"><small>'+series[0][0]+'</small><small>'+lastDay+'</small></div>'+
+    '<div class="anki-legend">'+legend+'</div>'+'<div class="anki-footer">'+updated+manage+'</div></section>';
 }

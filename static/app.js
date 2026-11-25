@@ -1,7 +1,7 @@
-import { progressPanel } from "./anki.js";
+import { progressPanel } from "./anki.js?v=settings";
 let anki, ankiDays=7;
 import { bindVideoLookup, youtubeVideoId } from "./youtube.js";
-import { initializeAccount, sessionChanged } from "./account.js";
+import { initializeAccount, sessionChanged, showAnkiSettings } from "./account.js?v=settings";
 import { renderCalendar } from "./calendar.js";
 const $ = s => document.querySelector(s);
 const main = $("#main"), dialog = $("#dialog"), selector = $("#languages");
@@ -176,11 +176,12 @@ async function loadDemo(){
   await choose(demo.language_id);
 }
 async function handle(actionName,id){
+  if(actionName==="anki-connect")return showAnkiSettings();
   if(actionName==="anki-decks"){
     const elsewhere=anki.decks.filter(d=>anki.roots[d.id] && anki.roots[d.id]!==lang);
     const options=anki.decks.map(deck=>{
       const conflict=elsewhere.some(other=>other.id===deck.id || other.name.startsWith(deck.name+"::") || deck.name.startsWith(other.name+"::"));
-      return '<label><input type="checkbox" name="deck" value="'+deck.id+'" '+(anki.roots[deck.id]===lang?'checked ':'')+(conflict?'disabled':'')+'> '+esc(deck.name)+(conflict?' (mapped elsewhere)':'')+'</label>';
+      return '<label class="deck-choice"><input type="checkbox" name="deck" value="'+deck.id+'" '+(anki.roots[deck.id]===lang?'checked ':'')+(conflict?'disabled':'')+'> '+esc(deck.name)+(conflict?' (mapped elsewhere)':'')+'</label>';
     }).join("");
     return form("Map Anki decks",'<p>Includes subdecks. Review history follows the current home deck.</p>'+options,"Save",()=>api("/"+lang+"/anki/decks","PUT",{decks:Array.from(dialog.querySelectorAll("[name=deck]:checked"),el=>Number(el.value))}));
   }
@@ -196,7 +197,12 @@ async function handle(actionName,id){
   if(actionName==="demo")return loadDemo();
   if(actionName==="language")return languageForm();
   if(actionName==="range"){days=id;return refresh()}
-  if(actionName==="anki-range"){ankiDays=id;return refresh()}
+  if(actionName==="anki-range"){
+    ankiDays=id;
+    await refresh();
+    main.querySelector('[data-action="anki-range"].active')?.focus({preventScroll:true});
+    return;
+  }
   if(!lang)return languageForm(()=>handle(actionName,id));
   const a=activities.find(v=>v.id===id),c=cards.find(v=>v.id===id);
   if(actionName==="preview")return previewVideo(a);
@@ -212,6 +218,13 @@ async function handle(actionName,id){
 }
 main.onclick=e=>{const b=e.target.closest("[data-action]");if(b)Promise.resolve(handle(b.dataset.action,Number(b.dataset.id))).catch(err=>notify(err.message))};
 main.onchange=e=>{if(e.target.id==="filter"){filter=e.target.value;render()}};
+dialog.addEventListener("anki-connected", async () => {
+  const fromDashboard = document.activeElement?.dataset.action === "anki-connect";
+  try {
+    await refresh();
+    if (fromDashboard) $("#account").focus();
+  } catch (error) { notify(error.message); }
+});
 dialog.onclick=e=>{if(e.target.closest("[data-close]"))dialog.close()};
 selector.onchange=()=>{
   if(selector.value==="add")return languageForm();
