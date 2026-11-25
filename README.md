@@ -2,6 +2,51 @@
 
 A private learner journal with a separate dashboard, activity history, and flashcard deck for each language.
 
+## Run with Docker Compose
+
+From this checkout on a Linux amd64 Docker host with the Compose plugin, run:
+
+```sh
+docker compose up -d --build
+```
+
+Open **http://127.0.0.1:8000** on the host. Register a learner and choose **Account → Anki sync** to create sync credentials. The gated Anki endpoint is **http://127.0.0.1:8081/**. Both published ports bind to loopback. The first build downloads the application dependencies.
+
+For devices connecting over the internet, configure your existing HTTPS proxy to forward the journal hostname to port 8000 and the sync hostname to port 8081. Allow large sync uploads and long requests on the sync hostname (see `deploy/anki.nginx.conf` for the limits). Place these settings in a project-local `.env` before running the same Compose command:
+
+```dotenv
+POLYGLOTTA_ORIGIN=https://journal.example.org
+POLYGLOTTA_ANKI_URL=https://anki.example.org/
+TZ=Europe/Kyiv
+```
+
+Use `docker compose logs -f` for logs and `docker compose down` to stop. A new Compose project starts with an empty journal. Named volumes retain the journal and Anki collections across container replacement. Keep the same Compose project name when upgrading. Back up before pulling updated code and rerunning the startup command.
+
+### Back up or import data
+
+For a consistent backup, run these from the checkout. The archive contains private journals, collections and sync credentials. Choose a new archive filename for each backup.
+
+```sh
+docker compose stop
+(umask 077 && docker compose run --rm --no-deps -T anki tar -C /var/lib -czf - polyglotta anki > polyglotta-backup.tar.gz)
+docker compose up -d
+```
+
+To restore into fresh volumes, build the images, then run `docker compose run --rm --no-deps -T anki tar -C /var/lib -xzf - < polyglotta-backup.tar.gz` before starting the stack.
+
+To import the default native installation, stop both native processes and back up its data. From the checkout, copy the journal and the complete Anki directory into **fresh** Compose volumes. Adjust the source paths if your native installation uses custom locations.
+
+```sh
+docker compose build
+docker compose run --rm --no-deps -T -v "$PWD/data:/import:ro" anki sh -ec '
+  cp /import/polyglotta.sqlite3* /var/lib/polyglotta/
+  cp -R /import/anki/. /var/lib/anki/
+'
+docker compose up -d
+```
+
+The import container runs as UID 10001 and needs read access to the source files. For a private native data directory, use a temporary backup copy readable by that UID. The native provisioning socket is transient and should be excluded from the copy.
+
 ## Run locally
 
 With Python 3.10 or newer, run these commands from the project directory.

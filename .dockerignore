@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!requirements*.txt
+!main.py
+!alembic.ini
+!polyglotta/
+!polyglotta/**/*.py
+!migrations/
+!migrations/**/*.py
+!static/
+!static/**
+**/__pycache__
+**/*.pyc
